@@ -1,7 +1,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import {ArrowDownUp,ArrowLeft,ArrowRight,Bookmark,BriefcaseBusiness,Building2,Check,ChevronDown,ChevronRight,Clock3,Filter,FileText,Globe2,MapPin,Menu,Search,SlidersHorizontal,X,Upload,Users,LogOut,Plus,ShieldCheck,Send,Trash2,PenLine,LockKeyhole,GraduationCap,Code2,Palette,ChartNoAxesCombined,Headphones,Flag} from 'lucide-react';
 import {seedJobs,categories,type Job} from './data';
-import {applyToJob,getAccount,isDemo,loadJobs,registerAccount,saveJob,signIn,signOut,supabase,unsaveJob,updateApplication,updateJob,type Account,uploadProfileResume,createJobForEmployer,updateEmployerListing,getEmployerJobs,getEmployerApplications,getCandidateApplications,saveCandidateProfile,loadCandidateProfile,requestPasswordReset,submitJobReport,getJobReports,updateJobReport,getAdminJobs,getAdminCounts,loadSavedJobs,getApplicationResume,getAdminUsers,setUserSuspended,updatePassword} from './backend';
+import {applyToJob,getAccount,isDemo,loadJobs,registerAccount,saveJob,signIn,signOut,supabase,unsaveJob,updateApplication,updateJob,type Account,uploadProfileResume,createJobForEmployer,updateEmployerListing,getEmployerJobs,getEmployerApplications,getCandidateApplications,saveCandidateProfile,loadCandidateProfile,requestPasswordReset,submitJobReport,getJobReports,updateJobReport,getAdminJobs,getAdminCounts,loadSavedJobs,getApplicationResume,getAdminUsers,setUserSuspended,updatePassword,getAdminCompanies,getAdminApplications,adminDeleteJob,adminUpdateCompany,adminDeleteCompany,adminUpdateUserRole,adminUpdateUser,adminDeleteApplication,adminDeleteReport,adminUpdateJobFull} from './backend';
 type Page='home'|'jobs'|'internships'|'companies'|'detail'|'dashboard'|'employer'|'admin'|'resources'|'about'|'privacy'|'terms';
 const icons=[Code2,Palette,ChartNoAxesCombined,ChartNoAxesCombined,BriefcaseBusiness,Headphones];
 
@@ -64,12 +64,210 @@ function EmployerPage({account,jobs,openDetail,navigate,setDialog,notify,refresh
 }
 
 function AdminPage({account,jobs,openDetail,notify,refresh,setDialog,navigate}:{account:Account|null;jobs:Job[];openDetail:any;notify:any;refresh:any;setDialog:any;navigate:any}){
-  const[all,setAll]=useState<Job[]>([]),[reports,setReports]=useState<any[]>([]),[users,setUsers]=useState<any[]>([]),[counts,setCounts]=useState({users:0,employers:0,applications:0});
-  const load=()=>{getAdminJobs().then(setAll).catch((e:any)=>notify(e.message));getJobReports().then(setReports).catch((e:any)=>notify(e.message));getAdminUsers().then(setUsers).catch((e:any)=>notify(e.message));getAdminCounts().then(setCounts).catch((e:any)=>notify(e.message))};
-  useEffect(()=>{if(account?.role==='admin')load()},[account?.id]);
-  if(!account||account.role!=='admin')return <SignInPrompt onOpen={()=>setDialog('auth')}/>;
-  const pending=all.filter(j=>j.status==='pending'),active=all.filter(j=>j.status==='active');
-  return <main className="page-wrap dashboard"><div className="dashboard-heading"><div><span className="kicker">ADMINISTRATION</span><h1>Moderation overview</h1><p>Review employer-submitted vacancies and reports.</p></div><span className="demo-notice compact-notice"><ShieldCheck size={14}/>Admin access</span></div><div className="dashboard-stats"><Metric title="Registered users" value={counts.users} icon={<Users size={18}/>}/><Metric title="Employers" value={counts.employers} icon={<Building2 size={18}/>}/><Metric title="Active listings" value={active.length} icon={<BriefcaseBusiness size={18}/>}/><Metric title="Applications" value={counts.applications} icon={<FileText size={18}/>}/></div><section className="panel"><div className="section-heading compact"><div><h2>Pending job approvals</h2><p>Demo listings are already identified and do not require approval.</p></div></div>{pending.length?pending.map(j=><div className="application-row" key={j.id}><span className="company-mark small">{j.logo}</span><div className="application-info"><button onClick={()=>openDetail(j)}>{j.title}</button><small>{j.company} · {j.location} · {j.type}</small></div><button className="btn btn-small btn-light" onClick={async()=>{try{await updateJob(j.id,{status:'active'});load();await refresh();notify('Listing approved and published')}catch(e:any){notify(e.message)}}}><Check size={14}/>Approve</button><button className="btn btn-small btn-outline" onClick={async()=>{try{await updateJob(j.id,{status:'rejected'});load();notify('Listing rejected')}catch(e:any){notify(e.message)}}}>Reject</button></div>):<div className="empty-inline"><Check size={20}/><span>No listings awaiting approval.</span></div>}</section><section className="panel" style={{marginTop:14}}><div className="section-heading compact"><div><h2>Reported listings</h2><p>Reports submitted by Jobify members.</p></div></div>{reports.filter(r=>r.status==='pending').length?reports.filter(r=>r.status==='pending').map((r:any)=><div className="application-row" key={r.id}><span className="company-mark small"><Flag size={15}/></span><div className="application-info"><b>{r.jobs?.title||r.jobTitle||all.find(j=>j.id===r.jobId)?.title||'Listing report'} · {r.reason}</b><small>{r.details||'No additional details'}{r.reporter?` · Reported by ${r.reporter}`:''}</small></div><button className="btn btn-small btn-outline" onClick={async()=>{try{await updateJobReport(r.id,'dismissed');load();notify('Report dismissed')}catch(e:any){notify(e.message)}}}>Dismiss</button><button className="btn btn-small btn-light" onClick={async()=>{try{await updateJobReport(r.id,'actioned');if(r.job_id||r.jobId){const jobId=r.job_id||r.jobId;await updateJob(jobId,{status:'closed'})}load();notify('Report actioned; related listing closed.')}catch(e:any){notify(e.message)}}}>Take action</button></div>):<div className="empty-inline"><Check size={20}/><span>No reports to review.</span></div>}</section><section className="panel" style={{marginTop:14}}><div className="section-heading compact"><div><h2>Account management</h2><p>Review registered Jobify accounts and suspend access where necessary.</p></div></div>{users.length?users.map((u:any)=><div className="application-row" key={u.id}><span className="company-mark small">{(u.full_name||u.email||'U')[0].toUpperCase()}</span><div className="application-info"><b>{u.full_name||'Jobify member'}</b><small>{u.email} · {u.role}</small></div><span className={`status-pill ${u.is_suspended?'pending':''}`}>{u.is_suspended?'Suspended':'Active'}</span><button className={`btn btn-small ${u.is_suspended?'btn-light':'btn-outline'}`} onClick={async()=>{try{await setUserSuspended(u.id,!u.is_suspended);load();notify(u.is_suspended?'Account access restored':'Account suspended')}catch(e:any){notify(e.message)}}}>{u.is_suspended?'Restore account':'Suspend account'}</button></div>):<div className="empty-inline"><Users size={20}/><span>No registered accounts to display.</span></div>}</section><Footer onNavigate={navigate}/></main>;
+  const[all,setAll]=useState<Job[]>([]),[reports,setReports]=useState<any[]>([]),[users,setUsers]=useState<any[]>([]),[companies,setCompanies]=useState<any[]>([]),[applications,setApplications]=useState<any[]>([]),[counts,setCounts]=useState({users:0,employers:0,applications:0,companies:0,pending:0,active:0,reports:0});
+  const[tab,setTab]=useState<'overview'|'jobs'|'companies'|'users'|'applications'|'reports'>('overview');
+  const[jobFilter,setJobFilter]=useState<'all'|'pending'|'active'|'closed'|'rejected'>('all');
+  const[editingCompany,setEditingCompany]=useState<any|null>(null);
+  const[editingUser,setEditingUser]=useState<any|null>(null);
+  const[editingJob,setEditingJob]=useState<Job|null>(null);
+  const[companySearch,setCompanySearch]=useState(''),[userSearch,setUserSearch]=useState(''),[appSearch,setAppSearch]=useState('');
+  const load=async()=>{
+    try{
+      const [jobsData, reportsData, usersData, companiesData, appsData, countsData]=await Promise.all([
+        getAdminJobs(), getJobReports(), getAdminUsers(), getAdminCompanies(), getAdminApplications(), getAdminCounts()
+      ]);
+      setAll(jobsData); setReports(reportsData); setUsers(usersData); setCompanies(companiesData); setApplications(appsData); setCounts(countsData as any);
+    }catch(e:any){ notify(e.message) }
+  };
+  useEffect(()=>{ if(account?.role==='admin') load() },[account?.id]);
+  if(!account||account.role!=='admin') return <SignInPrompt onOpen={()=>setDialog('auth')}/>;
+  const filteredJobs = jobFilter==='all'? all : all.filter(j=>j.status===jobFilter);
+  const filteredCompanies = companies.filter((c:any)=> !companySearch || [c.name,c.description,c.location,c.website,c.owner?.full_name,c.owner?.email].join(' ').toLowerCase().includes(companySearch.toLowerCase()));
+  const filteredUsers = users.filter((u:any)=> !userSearch || [u.full_name,u.email,u.role,u.headline,u.education].join(' ').toLowerCase().includes(userSearch.toLowerCase()));
+  const filteredApps = applications.filter((a:any)=> !appSearch || [a.jobTitle,a.companyName,a.candidateName,a.candidateEmail,a.status].join(' ').toLowerCase().includes(appSearch.toLowerCase()));
+  const pending=all.filter(j=>j.status==='pending');
+
+  return <main className="page-wrap dashboard">
+    <div className="dashboard-heading"><div><span className="kicker">ADMINISTRATION · FULL ACCESS</span><h1>Admin Control Center</h1><p>Manage companies, users, jobs, applications, reports — approve, reject, edit, delete everything.</p></div><span className="demo-notice compact-notice"><ShieldCheck size={14}/>Admin: {account.email}</span></div>
+
+    <div className="dashboard-stats">
+      <Metric title="Total Users" value={counts.users} icon={<Users size={18}/>}/>
+      <Metric title="Employers" value={counts.employers} icon={<Building2 size={18}/>}/>
+      <Metric title="Companies" value={counts.companies} icon={<Building2 size={18}/>}/>
+      <Metric title="Active Jobs" value={counts.active} icon={<BriefcaseBusiness size={18}/>}/>
+      <Metric title="Pending Jobs" value={counts.pending} icon={<Clock3 size={18}/>}/>
+      <Metric title="Applications" value={counts.applications} icon={<FileText size={18}/>}/>
+      <Metric title="Pending Reports" value={counts.reports} icon={<Flag size={18}/>}/>
+    </div>
+
+    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:18}}>
+      {[
+        ['overview','Overview'],['jobs',`Jobs (${all.length})`],['companies',`Companies (${companies.length})`],
+        ['users',`Users (${users.length})`],['applications',`Applications (${applications.length})`],['reports',`Reports (${reports.length})`]
+      ].map(([key,label])=><button key={key} className={`btn ${tab===key?'btn-light':'btn-outline'} btn-small`} onClick={()=>setTab(key as any)}>{label}</button>)}
+      <button className="btn btn-outline btn-small" onClick={load}><ArrowDownUp size={13}/>Refresh data</button>
+    </div>
+
+    {tab==='overview'&&<>
+      <section className="panel"><div className="section-heading compact"><div><h2>Pending approvals — quick action</h2><p>{pending.length} jobs awaiting approval</p></div><button className="text-link" onClick={()=>setTab('jobs')}>Go to jobs<ChevronRight size={14}/></button></div>
+        {pending.length? pending.slice(0,5).map(j=><div className="application-row" key={j.id}><span className="company-mark small">{j.logo}</span><div className="application-info"><button onClick={()=>openDetail(j)}>{j.title}</button><small>{j.company} · {j.location} · {j.type} · {j.status}</small></div>
+          <button className="btn btn-small btn-light" onClick={async()=>{try{await updateJob(j.id,{status:'active'});await load();await refresh();notify('Approved & published')}catch(e:any){notify(e.message)}}}><Check size={14}/>Approve</button>
+          <button className="btn btn-small btn-outline" onClick={async()=>{try{await updateJob(j.id,{status:'rejected'});await load();notify('Rejected')}catch(e:any){notify(e.message)}}}>Reject</button>
+          <button className="btn btn-small btn-outline" onClick={()=>setEditingJob(j)}><PenLine size={13}/>Edit</button>
+        </div>):<div className="empty-inline"><Check size={20}/><span>No pending jobs — all clear.</span></div>}
+      </section>
+      <div className="dashboard-columns" style={{marginTop:14}}>
+        <section className="panel"><div className="section-heading compact"><div><h2>Recent companies</h2></div><button className="text-link" onClick={()=>setTab('companies')}>Manage<ChevronRight size={14}/></button></div>
+          {companies.slice(0,5).map((c:any)=><div className="application-row" key={c.id}><span className="company-mark small">{c.name[0]}</span><div className="application-info"><b>{c.name}</b><small>{c.owner?.full_name||'No owner'} · {c.location||'No location'} · {c.job_count} jobs</small></div><span className="status-pill">{new Date(c.created_at).toLocaleDateString()}</span></div>)}
+        </section>
+        <section className="panel"><div className="section-heading compact"><div><h2>Recent users</h2></div><button className="text-link" onClick={()=>setTab('users')}>Manage<ChevronRight size={14}/></button></div>
+          {users.slice(0,5).map((u:any)=><div className="application-row" key={u.id}><span className="company-mark small">{(u.full_name||u.email||'U')[0].toUpperCase()}</span><div className="application-info"><b>{u.full_name||'Member'}</b><small>{u.email} · {u.role} {u.is_suspended?'· Suspended':''}</small></div><span className="status-pill">{u.role}</span></div>)}
+        </section>
+      </div>
+    </>}
+
+    {tab==='jobs'&&<section className="panel">
+      <div className="section-heading compact"><div><h2>All job listings — full control</h2><p>Approve, reject, close, reopen, edit details, delete. Demo flag visible.</p></div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{(['all','pending','active','closed','rejected'] as const).map(s=><button key={s} className={`btn btn-small ${jobFilter===s?'btn-light':'btn-outline'}`} onClick={()=>setJobFilter(s)}>{s} ({s==='all'?all.length:all.filter(j=>j.status===s).length})</button>)}</div>
+      </div>
+      {filteredJobs.length? filteredJobs.map(j=><div className="application-row" key={j.id} style={{alignItems:'flex-start'}}>
+        <span className="company-mark small">{j.logo}</span>
+        <div className="application-info"><button onClick={()=>openDetail(j)} style={{fontWeight:700}}>{j.title} {j.demo&&<span className="demo-tag">DEMO</span>}</button>
+          <small>{j.company} · {j.location} · {j.type} · {j.arrangement} · {j.level} · {j.category}</small>
+          <small>ID: {j.id.slice(0,8)}… · By: {(j as any).created_by?.slice(0,8) || 'system'} · {j.posted} · Status: <b>{j.status}</b></small>
+        </div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end',maxWidth:380}}>
+          {j.status==='pending'&&<><button className="btn btn-small btn-light" onClick={async()=>{try{await updateJob(j.id,{status:'active'});await load();await refresh();notify('Approved')}catch(e:any){notify(e.message)}}}><Check size={12}/>Approve</button>
+          <button className="btn btn-small btn-outline" onClick={async()=>{try{await updateJob(j.id,{status:'rejected'});await load();notify('Rejected')}catch(e:any){notify(e.message)}}}>Reject</button></>}
+          {j.status==='active'&&<button className="btn btn-small btn-outline" onClick={async()=>{try{await updateJob(j.id,{status:'closed'});await load();await refresh();notify('Closed')}catch(e:any){notify(e.message)}}}>Close</button>}
+          {(j.status==='closed'||j.status==='rejected')&&<button className="btn btn-small btn-outline" onClick={async()=>{try{await updateJob(j.id,{status:'active'});await load();await refresh();notify('Reopened as active')}catch(e:any){notify(e.message)}}}>Reopen</button>}
+          <button className="btn btn-small btn-outline" onClick={()=>setEditingJob(j)}><PenLine size={12}/>Edit</button>
+          <button className="btn btn-small btn-outline" style={{color:'#e5a0a0',borderColor:'#5a2a2a'}} onClick={async()=>{if(!confirm(`Delete job \"${j.title}\" permanently? This will also delete its applications.`))return;try{await adminDeleteJob(j.id);await load();await refresh();notify('Job deleted')}catch(e:any){notify(e.message)}}}><Trash2 size={12}/>Delete</button>
+        </div>
+      </div>):<div className="empty-inline"><BriefcaseBusiness size={20}/><span>No jobs for this filter.</span></div>}
+    </section>}
+
+    {tab==='companies'&&<section className="panel">
+      <div className="section-heading compact"><div><h2>Companies — full details & control</h2><p>View owner, website, location, job count. Edit or delete any company.</p></div>
+        <label className="search-input" style={{maxWidth:260}}><Search size={14}/><input value={companySearch} onChange={e=>setCompanySearch(e.target.value)} placeholder="Search companies, owners..."/></label>
+      </div>
+      {filteredCompanies.length? filteredCompanies.map((c:any)=><div className="application-row" key={c.id} style={{alignItems:'flex-start'}}>
+        <span className="company-mark small">{c.name[0]}</span>
+        <div className="application-info"><b>{c.name} {c.is_demo&&<span className="demo-tag">DEMO</span>}</b>
+          <small>Owner: {c.owner?.full_name||'—'} ({c.owner?.email||'no email'}) · Role: {c.owner?.role||'—'}</small>
+          <small>{c.description||'No description'} </small>
+          <small>Website: {c.website||'—'} · Location: {c.location||'—'} · Jobs: {c.job_count} · Created: {new Date(c.created_at).toLocaleDateString()}</small>
+          <small>ID: {c.id}</small>
+        </div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          <button className="btn btn-small btn-outline" onClick={()=>setEditingCompany(c)}><PenLine size={12}/>Edit</button>
+          <button className="btn btn-small btn-outline" style={{color:'#e5a0a0',borderColor:'#5a2a2a'}} onClick={async()=>{if(!confirm(`Delete company \"${c.name}\"? All its jobs will be deleted!`))return;try{await adminDeleteCompany(c.id);await load();await refresh();notify('Company deleted')}catch(e:any){notify(e.message)}}}><Trash2 size={12}/>Delete</button>
+        </div>
+      </div>):<div className="empty-inline"><Building2 size={20}/><span>No companies match search.</span></div>}
+    </section>}
+
+    {tab==='users'&&<section className="panel">
+      <div className="section-heading compact"><div><h2>Registered users — full data & activities</h2><p>Read all profiles, edit details, change roles, suspend/restore, view resumes.</p></div>
+        <label className="search-input" style={{maxWidth:260}}><Search size={14}/><input value={userSearch} onChange={e=>setUserSearch(e.target.value)} placeholder="Search name, email, role..."/></label>
+      </div>
+      {filteredUsers.length? filteredUsers.map((u:any)=><div className="application-row" key={u.id} style={{alignItems:'flex-start'}}>
+        <span className="company-mark small">{(u.full_name||u.email||'U')[0].toUpperCase()}</span>
+        <div className="application-info">
+          <b>{u.full_name||'Unnamed'} <span className={`status-pill ${u.is_suspended?'pending':''}`} style={{marginLeft:6}}>{u.is_suspended?'Suspended':u.role}</span></b>
+          <small>Email: {u.email} · ID: {u.id.slice(0,8)}… · Created: {u.created_at? new Date(u.created_at).toLocaleDateString():'—'}</small>
+          <small>Headline: {u.headline||'—'} · Education: {u.education||'—'}</small>
+          <small>Skills: {Array.isArray(u.skills)? u.skills.join(', '): u.skills||'—'} · Experience: {(u.experience||'').slice(0,120)}{(u.experience||'').length>120?'…':''}</small>
+          <small>Company ID: {u.company_id||'—'} · Resume: {u.resume_path? u.resume_path.split('/').pop():'No resume'}</small>
+        </div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',maxWidth:360,justifyContent:'flex-end'}}>
+          <select className="btn btn-small btn-outline" value={u.role} onChange={async e=>{const newRole=e.target.value as any; if(!confirm(`Change role of ${u.email} to ${newRole}?`))return; try{await adminUpdateUserRole(u.id,newRole);await load();notify(`Role changed to ${newRole}`)}catch(err:any){notify(err.message)}}}>
+            <option value="candidate">candidate</option><option value="employer">employer</option><option value="admin">admin</option>
+          </select>
+          <button className={`btn btn-small ${u.is_suspended?'btn-light':'btn-outline'}`} onClick={async()=>{try{await setUserSuspended(u.id,!u.is_suspended);await load();notify(u.is_suspended?'Restored':'Suspended')}catch(e:any){notify(e.message)}}}>{u.is_suspended?'Restore':'Suspend'}</button>
+          <button className="btn btn-small btn-outline" onClick={()=>setEditingUser(u)}><PenLine size={12}/>Edit</button>
+          {u.resume_path&&<button className="btn btn-small btn-outline" onClick={async()=>{try{const url=await getApplicationResume(u.resume_path);window.open(url,'_blank')}catch(e:any){notify(e.message)}}}><FileText size={12}/>Resume</button>}
+        </div>
+      </div>):<div className="empty-inline"><Users size={20}/><span>No users match.</span></div>}
+    </section>}
+
+    {tab==='applications'&&<section className="panel">
+      <div className="section-heading compact"><div><h2>All applications — monitor every activity</h2><p>View cover letters, answers, resumes, change status, delete.</p></div>
+        <label className="search-input" style={{maxWidth:260}}><Search size={14}/><input value={appSearch} onChange={e=>setAppSearch(e.target.value)} placeholder="Search job, candidate..."/></label>
+      </div>
+      {filteredApps.length? filteredApps.map((a:any)=><div className="application-row" key={a.id} style={{alignItems:'flex-start'}}>
+        <span className="company-mark small">{a.candidateName?.[0]||'C'}</span>
+        <div className="application-info"><b>{a.jobTitle||a.jobs?.title||'Job'} — {a.candidateName||'Candidate'}</b>
+          <small>Company: {a.companyName||a.jobs?.companies?.name||'—'} · Candidate: {a.candidateEmail||a.candidate_id} · {new Date(a.createdAt||a.created_at).toLocaleDateString()}</small>
+          <small>Status: {a.status} · ID: {a.id.slice(0,8)}… · Cover: {(a.cover_letter||'').slice(0,100)}{(a.cover_letter||'').length>100?'…':''}</small>
+          {a.answers&&Object.keys(a.answers).length>0&&<small>Answers: {JSON.stringify(a.answers).slice(0,120)}</small>}
+          <small>Resume: {a.resume_path? a.resume_path.split('/').pop():'—'}</small>
+        </div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',maxWidth:380,justifyContent:'flex-end'}}>
+          <select className="btn btn-small btn-outline" value={a.status} onChange={async e=>{try{await updateApplication(a.id,e.target.value);await load();notify('Status updated')}catch(err:any){notify(err.message)}}}>
+            {['Submitted','Under Review','Shortlisted','Rejected','Hired'].map(s=><option key={s}>{s}</option>)}
+          </select>
+          {a.resume_path&&<button className="btn btn-small btn-outline" onClick={async()=>{try{const url=await getApplicationResume(a.resume_path);window.open(url,'_blank')}catch(e:any){notify(e.message)}}}><FileText size={12}/>View CV</button>}
+          <button className="btn btn-small btn-outline" style={{color:'#e5a0a0',borderColor:'#5a2a2a'}} onClick={async()=>{if(!confirm('Delete this application?'))return;try{await adminDeleteApplication(a.id);await load();notify('Application deleted')}catch(e:any){notify(e.message)}}}><Trash2 size={12}/>Delete</button>
+        </div>
+      </div>):<div className="empty-inline"><Send size={20}/><span>No applications found.</span></div>}
+    </section>}
+
+    {tab==='reports'&&<section className="panel">
+      <div className="section-heading compact"><div><h2>Reports — full moderation</h2><p>Review, dismiss, action (close job), or delete reports.</p></div></div>
+      {reports.length? reports.map((r:any)=><div className="application-row" key={r.id} style={{alignItems:'flex-start'}}>
+        <span className="company-mark small"><Flag size={15}/></span>
+        <div className="application-info"><b>{r.jobs?.title||all.find(j=>j.id===r.job_id)?.title||'Listing report'} · {r.reason} · <span className="status-pill">{r.status}</span></b>
+          <small>{r.details||'No details'} · Reporter: {r.reporter_id?.slice(0,8)}… · Job: {r.job_id?.slice(0,8)}… · {new Date(r.created_at).toLocaleDateString()}</small>
+        </div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          {r.status==='pending'&&<><button className="btn btn-small btn-outline" onClick={async()=>{try{await updateJobReport(r.id,'dismissed');await load();notify('Dismissed')}catch(e:any){notify(e.message)}}}>Dismiss</button>
+          <button className="btn btn-small btn-light" onClick={async()=>{try{await updateJobReport(r.id,'actioned');if(r.job_id){await updateJob(r.job_id,{status:'closed'})}await load();await refresh();notify('Actioned & closed job')}catch(e:any){notify(e.message)}}}>Action & Close Job</button></>}
+          <button className="btn btn-small btn-outline" style={{color:'#e5a0a0',borderColor:'#5a2a2a'}} onClick={async()=>{if(!confirm('Delete this report?'))return;try{await adminDeleteReport(r.id);await load();notify('Report deleted')}catch(e:any){notify(e.message)}}}><Trash2 size={12}/>Delete</button>
+        </div>
+      </div>):<div className="empty-inline"><Flag size={20}/><span>No reports.</span></div>}
+    </section>}
+
+    {editingCompany&&<div className="modal-backdrop" onMouseDown={e=>e.target===e.currentTarget&&setEditingCompany(null)}><section className="modal"><button className="modal-close" onClick={()=>setEditingCompany(null)}><X size={16}/></button><h2>Edit Company</h2><p>{editingCompany.name} — ID: {editingCompany.id.slice(0,8)}…</p>
+      <form className="modal-form" onSubmit={async e=>{e.preventDefault();const fd=new FormData(e.currentTarget);try{await adminUpdateCompany(editingCompany.id,{name:String(fd.get('name')),description:String(fd.get('description')),website:String(fd.get('website')),location:String(fd.get('location'))});setEditingCompany(null);await load();await refresh();notify('Company updated')}catch(err:any){notify(err.message)}}}>
+        <label>Name<input name="name" defaultValue={editingCompany.name} required/></label>
+        <label>Description<textarea name="description" rows={3} defaultValue={editingCompany.description||''}/></label>
+        <label>Website<input name="website" defaultValue={editingCompany.website||''} placeholder="https://..."/></label>
+        <label>Location<input name="location" defaultValue={editingCompany.location||''}/></label>
+        <button className="btn btn-light full-width" type="submit">Save company<Check size={14}/></button>
+      </form></section></div>}
+
+    {editingUser&&<div className="modal-backdrop" onMouseDown={e=>e.target===e.currentTarget&&setEditingUser(null)}><section className="modal"><button className="modal-close" onClick={()=>setEditingUser(null)}><X size={16}/></button><h2>Edit User</h2><p>{editingUser.email} — {editingUser.id.slice(0,8)}…</p>
+      <form className="modal-form" onSubmit={async e=>{e.preventDefault();const fd=new FormData(e.currentTarget);try{await adminUpdateUser(editingUser.id,{full_name:String(fd.get('full_name')),headline:String(fd.get('headline')),education:String(fd.get('education')),experience:String(fd.get('experience'))});const newRole=String(fd.get('role')) as any; if(newRole!==editingUser.role){await adminUpdateUserRole(editingUser.id,newRole)} setEditingUser(null);await load();notify('User updated')}catch(err:any){notify(err.message)}}}>
+        <label>Full name<input name="full_name" defaultValue={editingUser.full_name||''} required/></label>
+        <label>Role<select name="role" defaultValue={editingUser.role}><option value="candidate">candidate</option><option value="employer">employer</option><option value="admin">admin</option></select></label>
+        <label>Headline<input name="headline" defaultValue={editingUser.headline||''}/></label>
+        <label>Education<input name="education" defaultValue={editingUser.education||''}/></label>
+        <label>Experience<textarea name="experience" rows={3} defaultValue={editingUser.experience||''}/></label>
+        <button className="btn btn-light full-width" type="submit">Save user<Check size={14}/></button>
+      </form></section></div>}
+
+    {editingJob&&<div className="modal-backdrop" onMouseDown={e=>e.target===e.currentTarget&&setEditingJob(null)}><section className="modal modal-wide"><button className="modal-close" onClick={()=>setEditingJob(null)}><X size={16}/></button><span className="kicker">ADMIN EDIT</span><h2>Edit Job — Full Access</h2><p>{editingJob.title} — {editingJob.company}</p>
+      <form className="modal-form post-form" onSubmit={async e=>{e.preventDefault();const fd=new FormData(e.currentTarget);const payload:any={title:String(fd.get('title')),description:String(fd.get('description')),location:String(fd.get('location')),type:String(fd.get('type')),arrangement:String(fd.get('arrangement')),level:String(fd.get('level')),category:String(fd.get('category')),salary:String(fd.get('salary')),deadline:String(fd.get('deadline'))||undefined,skills:String(fd.get('skills')).split(',').map((x:string)=>x.trim()).filter(Boolean),questions:String(fd.get('questions')||'').split('\n').map((x:string)=>x.trim()).filter(Boolean),resubmission:fd.get('resubmission')==='on',status:String(fd.get('status'))};try{await adminUpdateJobFull(editingJob.id,payload);setEditingJob(null);await load();await refresh();notify('Job updated by admin')}catch(err:any){notify(err.message)}}}>
+        <label>Job title<input name="title" required defaultValue={editingJob.title}/></label>
+        <div className="form-two">
+          <label>Category<select name="category" defaultValue={editingJob.category}>{categories.map(([c]:any)=><option key={c}>{c}</option>)}</select></label>
+          <label>Status<select name="status" defaultValue={editingJob.status}><option value="pending">pending</option><option value="active">active</option><option value="closed">closed</option><option value="rejected">rejected</option></select></label>
+          <label>Location<input name="location" required defaultValue={editingJob.location}/></label>
+          <label>Employment<select name="type" defaultValue={editingJob.type}><option>Full-time</option><option>Internship</option><option>Entry-level</option><option>Part-time</option><option>Contract</option></select></label>
+          <label>Arrangement<select name="arrangement" defaultValue={editingJob.arrangement}><option>On-site</option><option>Hybrid</option><option>Remote</option></select></label>
+          <label>Level<select name="level" defaultValue={editingJob.level}><option>Entry-level</option><option>Student / Intern</option><option>Mid-level</option><option>Experienced</option></select></label>
+          <label>Salary<input name="salary" defaultValue={editingJob.salary||''}/></label>
+          <label>Deadline<input name="deadline" type="date" defaultValue={editingJob.deadline||''}/></label>
+        </div>
+        <label>Description<textarea name="description" rows={4} required defaultValue={editingJob.description}/></label>
+        <label>Skills<input name="skills" defaultValue={editingJob.skills?.join(', ')||''}/></label>
+        <label>Questions<textarea name="questions" rows={2} defaultValue={editingJob.questions?.join('\n')||''}/></label>
+        <label className="checkbox-setting"><input type="checkbox" name="resubmission" defaultChecked={editingJob.resubmission}/><span>Allow resubmission</span></label>
+        <button className="btn btn-light full-width" type="submit">Save job as admin<Check size={14}/></button>
+      </form></section></div>}
+
+    <Footer onNavigate={navigate}/>
+  </main>;
 }
 
 function CompaniesPage({jobs,query,setQuery,navigate,setPage}:{jobs:Job[];query:string;setQuery:any;navigate:any;setPage:any}){
