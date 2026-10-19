@@ -50,7 +50,7 @@ export async function loadJobs(): Promise<Job[]> {
       ...j, company: j.companies?.name || 'Company', companyId: j.created_by, logo: j.companies?.name?.[0] || 'J',
       location: j.location, type: j.employment_type, arrangement: j.work_arrangement, level: j.experience_level,
       posted: new Date(j.created_at).toLocaleDateString(), description: j.description, responsibilities: j.responsibilities || [],
-      qualifications: j.qualifications || [], skills: j.skills || [], questions: j.application_questions || [], resubmission: j.allow_resubmission,
+      qualifications: j.qualifications || [], requirements: j.requirements || j.qualifications || [], skills: j.skills || [], questions: j.application_questions || [], resubmission: j.allow_resubmission,
       salary: j.salary_min != null && j.salary_max != null ? `${j.salary_currency || 'PKR'} ${Number(j.salary_min).toLocaleString()}–${Number(j.salary_max).toLocaleString()} / month` : undefined,
       deadline: j.application_deadline, demo: j.is_demo, status: j.status
     }))
@@ -119,7 +119,7 @@ export async function updatePassword(password: string) {
 
 export const applicationsFor = (userId: string): any[] => get('applications', []).filter((a: any) => a.candidateId === userId);
 
-export async function createJobForEmployer(account: Account, form: Partial<Job>) {
+export async function createJobForEmployer(account: Account, form: Partial<Job> & {requirements?: string[]}) {
   if (supabase) {
     const { data: profile, error: profileError } = await supabase.from('profiles').select('company_id').eq('id', account.id).single();
     if (profileError || !profile?.company_id) throw new Error('Company profile is missing. Please complete employer registration.');
@@ -128,6 +128,7 @@ export async function createJobForEmployer(account: Account, form: Partial<Job>)
       company_id: profile.company_id, created_by: account.id, title: form.title, description: form.description,
       location: form.location, employment_type: form.type, work_arrangement: form.arrangement, experience_level: form.level,
       category: form.category, skills: form.skills || [], application_questions: form.questions || [],
+      responsibilities: form.responsibilities || [], qualifications: form.qualifications || [], requirements: (form as any).requirements || form.qualifications || [],
       salary_min: nums[0] || null, salary_max: nums[1] || nums[0] || null, application_deadline: form.deadline || null,
       allow_resubmission: form.resubmission || false, status: 'pending'
     });
@@ -136,7 +137,9 @@ export async function createJobForEmployer(account: Account, form: Partial<Job>)
   const job = {
     ...form, id: `job-${Date.now()}`, company: account.company || account.name, logo: (account.company || account.name).slice(0, 1).toUpperCase(),
     posted: 'Just now', responsibilities: form.responsibilities || ['Work collaboratively with the team.'],
-    qualifications: form.qualifications || ['Relevant experience or equivalent skills.'], skills: form.skills || [], status: 'pending' as const,
+    qualifications: form.qualifications || ['Relevant experience or equivalent skills.'],
+    requirements: (form as any).requirements || form.qualifications || ['Good communication skills','Team player','Eagerness to learn'],
+    skills: form.skills || [], status: 'pending' as const,
     companyId: account.id, demo: false
   } as Job; const jobs = get('jobs', seedJobs); jobs.unshift(job); put('jobs', jobs)
 }
@@ -153,7 +156,7 @@ export async function getEmployerJobs(userId: string): Promise<Job[]> {
       type: j.employment_type, arrangement: j.work_arrangement, level: j.experience_level, posted: new Date(j.created_at).toLocaleDateString(),
       salary: j.salary_min != null ? `${j.salary_currency} ${j.salary_min}–${j.salary_max}` : undefined, deadline: j.application_deadline,
       status: j.status, demo: j.is_demo, resubmission: j.allow_resubmission, responsibilities: j.responsibilities || [],
-      qualifications: j.qualifications || [], skills: j.skills || [], questions: j.application_questions || []
+      qualifications: j.qualifications || [], requirements: j.requirements || j.qualifications || [], skills: j.skills || [], questions: j.application_questions || []
     }))
   }
   return allJobs().filter(j => j.companyId === userId)
@@ -167,12 +170,13 @@ export async function updateJob(id: string, changes: Partial<Job>) {
   const jobs = allJobs().map(j => j.id === id ? { ...j, ...changes } : j); put('jobs', jobs)
 }
 
-export async function updateEmployerListing(id: string, form: Partial<Job>) {
+export async function updateEmployerListing(id: string, form: Partial<Job> & {requirements?: string[]}) {
   if (supabase) {
     const nums = (form.salary || '').match(/[0-9][0-9,]*/g)?.map(v => Number(v.replace(/,/g, ''))) || [];
     const { error } = await supabase.from('jobs').update({
       title: form.title, description: form.description, location: form.location, employment_type: form.type,
       work_arrangement: form.arrangement, experience_level: form.level, category: form.category, skills: form.skills || [],
+      responsibilities: form.responsibilities || [], qualifications: form.qualifications || [], requirements: (form as any).requirements || [],
       application_questions: form.questions || [], salary_min: nums[0] || null, salary_max: nums[1] || nums[0] || null,
       application_deadline: form.deadline || null, allow_resubmission: form.resubmission || false
     }).eq('id', id);
@@ -240,7 +244,7 @@ export async function getAdminJobs(): Promise<Job[]> {
       ...j, company: j.companies?.name || 'Company', logo: j.companies?.name?.[0] || 'J', type: j.employment_type,
       arrangement: j.work_arrangement, level: j.experience_level, posted: new Date(j.created_at).toLocaleDateString(),
       status: j.status, demo: j.is_demo, resubmission: j.allow_resubmission, skills: j.skills || [], responsibilities: j.responsibilities || [],
-      qualifications: j.qualifications || [], questions: j.application_questions || [], description: j.description, title: j.title,
+      qualifications: j.qualifications || [], requirements: j.requirements || j.qualifications || [], questions: j.application_questions || [], description: j.description, title: j.title,
       location: j.location, category: j.category, created_by: j.created_by, company_id: j.company_id, salary: j.salary_min ? `${j.salary_currency} ${j.salary_min}–${j.salary_max}` : undefined
     }))
   }
@@ -355,13 +359,15 @@ export async function adminDeleteReport(id: string) {
   put('reports', get('reports', []).filter((r: any) => r.id !== id));
 }
 
-export async function adminUpdateJobFull(id: string, form: Partial<Job>) {
+export async function adminUpdateJobFull(id: string, form: Partial<Job> & {requirements?: string[]}) {
   if (supabase) {
     const nums = (form.salary || '').match(/[0-9][0-9,]*/g)?.map(v => Number(v.replace(/,/g, ''))) || [];
     const { error } = await supabase.from('jobs').update({
       title: form.title, description: form.description, location: form.location,
       employment_type: form.type, work_arrangement: form.arrangement, experience_level: form.level,
-      category: form.category, skills: form.skills || [], application_questions: form.questions || [],
+      category: form.category, skills: form.skills || [], responsibilities: form.responsibilities || [],
+      qualifications: form.qualifications || [], requirements: (form as any).requirements || [],
+      application_questions: form.questions || [],
       salary_min: nums[0] || null, salary_max: nums[1] || nums[0] || null,
       application_deadline: form.deadline || null, allow_resubmission: form.resubmission || false, status: form.status || undefined
     }).eq('id', id);
