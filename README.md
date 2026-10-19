@@ -23,7 +23,7 @@ npm run preview
 1. Create a Supabase project.
 2. In **Project Settings → API**, copy the project URL and the **anon/public** key.
 3. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. Never put a service-role key in a `VITE_` variable or client code.
-4. Run `supabase/migrations/001_jobify.sql` in the Supabase SQL Editor (or use the Supabase CLI). The migration creates the relational schema, signup profile/company trigger, indexes, RLS policies, and private PDF `resumes` storage bucket.
+4. Run `supabase/migrations/001_jobify.sql` in the Supabase SQL Editor (or use the Supabase CLI). The migration creates the relational schema, signup profile/company trigger, indexes, RLS policies, and private PDF `resumes` storage bucket. If the project was set up before these fixes, also run `supabase/migrations/002_admin_fixes.sql` once; it adds the missing `jobs.requirements` column, the admin delete policies, and reloads the PostgREST schema cache.
 5. Optionally run `supabase/seed.sql` for eight clearly identified sample vacancies. Seed companies and jobs have `is_demo=true` and are not verified opportunities.
 6. Configure Supabase Auth email confirmation, redirect URLs, password reset redirects, and production site URL for your deployment.
 7. Register an employer account to create its company profile; candidate and employer signups are supported. Employer listings begin as **pending** and become public only after moderation. Salary is optional and the sample roles without specified compensation display no figure.
@@ -57,5 +57,6 @@ Build with `npm run build`; publish the generated `dist/` directory. For Vercel,
 - `src/data.ts` — explicitly labeled demo listings and category data
 - `src/backend.ts` — Supabase operations plus browser-local demo fallback
 - `supabase/migrations/001_jobify.sql` — production schema, triggers, storage, and RLS
+- `supabase/migrations/002_admin_fixes.sql` — idempotent fixes for existing databases (missing `jobs.requirements`, admin delete policies, schema-cache reload)
 - `supabase/seed.sql` — optional demo company and job records
 - `stitch_jobify_career_portal/` — supplied visual references and design specification
