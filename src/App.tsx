@@ -72,12 +72,18 @@ function AdminPage({account,jobs,openDetail,notify,refresh,setDialog,navigate}:{
   const[editingJob,setEditingJob]=useState<Job|null>(null);
   const[companySearch,setCompanySearch]=useState(''),[userSearch,setUserSearch]=useState(''),[appSearch,setAppSearch]=useState('');
   const load=async()=>{
-    try{
-      const [jobsData, reportsData, usersData, companiesData, appsData, countsData]=await Promise.all([
-        getAdminJobs(), getJobReports(), getAdminUsers(), getAdminCompanies(), getAdminApplications(), getAdminCounts()
-      ]);
-      setAll(jobsData); setReports(reportsData); setUsers(usersData); setCompanies(companiesData); setApplications(appsData); setCounts(countsData as any);
-    }catch(e:any){ notify(e.message) }
+    // Load each section independently: one failing query should not blank the whole panel.
+    const [jobsData, reportsData, usersData, companiesData, appsData, countsData]=await Promise.allSettled([
+      getAdminJobs(), getJobReports(), getAdminUsers(), getAdminCompanies(), getAdminApplications(), getAdminCounts()
+    ]);
+    if(jobsData.status==='fulfilled')setAll(jobsData.value);
+    if(reportsData.status==='fulfilled')setReports(reportsData.value);
+    if(usersData.status==='fulfilled')setUsers(usersData.value);
+    if(companiesData.status==='fulfilled')setCompanies(companiesData.value);
+    if(appsData.status==='fulfilled')setApplications(appsData.value);
+    if(countsData.status==='fulfilled')setCounts(countsData.value as any);
+    const failed=[jobsData,reportsData,usersData,companiesData,appsData,countsData].find(r=>r.status==='rejected');
+    if(failed&&failed.status==='rejected')notify(failed.reason?.message||'Some admin data could not be loaded.');
   };
   useEffect(()=>{ if(account?.role==='admin') load() },[account?.id]);
   if(!account||account.role!=='admin') return <SignInPrompt onOpen={()=>setDialog('auth')}/>;

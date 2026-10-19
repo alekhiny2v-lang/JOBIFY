@@ -40,6 +40,7 @@ create table if not exists public.jobs (
   description text not null check (char_length(description) >= 30),
   responsibilities text[] not null default '{}',
   qualifications text[] not null default '{}',
+  requirements text[] not null default '{}',
   skills text[] not null default '{}',
   application_questions text[] not null default '{}',
   category text not null,
@@ -158,11 +159,13 @@ create policy "Admin moderates jobs" on public.jobs for all using(public.is_admi
 create policy "Candidates read own applications; employers read relevant" on public.applications for select using((candidate_id=auth.uid() and public.is_account_active()) or public.is_admin() or (public.is_account_active() and public.is_job_owner(job_id)));
 create policy "Candidates apply to active open jobs" on public.applications for insert with check(candidate_id=auth.uid() and public.is_account_active() and public.current_user_role()='candidate' and status='Submitted' and (resume_path is null or resume_path like auth.uid()::text || '/%') and exists(select 1 from public.jobs j where j.id=job_id and j.status='active' and (j.application_deadline is null or j.application_deadline>=current_date) and (j.allow_resubmission or not exists(select 1 from public.applications a where a.job_id=j.id and a.candidate_id=auth.uid()))));
 create policy "Employer/admin updates application status" on public.applications for update using((public.is_account_active() and public.is_job_owner(job_id)) or public.is_admin()) with check((public.is_account_active() and public.is_job_owner(job_id)) or public.is_admin());
+create policy "Admins delete applications" on public.applications for delete using(public.is_admin());
 
 create policy "Candidates manage own saved jobs" on public.saved_jobs for all using((candidate_id=auth.uid() and public.is_account_active() and public.current_user_role()='candidate') or public.is_admin()) with check((candidate_id=auth.uid() and public.is_account_active() and public.current_user_role()='candidate') or public.is_admin());
 create policy "Users submit reports" on public.reports for insert with check(reporter_id=auth.uid() and public.is_account_active());
 create policy "Reporter and admins read reports" on public.reports for select using((reporter_id=auth.uid() and public.is_account_active()) or public.is_admin());
 create policy "Admins moderate reports" on public.reports for update using(public.is_admin()) with check(public.is_admin());
+create policy "Admins delete reports" on public.reports for delete using(public.is_admin());
 
 -- Create private resume storage bucket. Resume object path: <candidate-auth-uid>/<application-uuid>/<filename>.pdf
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)

@@ -298,13 +298,31 @@ export async function setUserSuspended(userId: string, suspended: boolean) {
 
 export async function getAdminCompanies() {
   if (supabase) {
-    const { data, error } = await supabase.from('companies').select('*, owner:profiles!companies_owner_id_fkey(full_name,email,role), jobs:jobs(count)').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('companies').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    // get job counts per company separately if needed
-    const { data: jobCounts } = await supabase.from('jobs').select('company_id');
+    const companies = data || [];
+
+    // companies.owner_id references auth.users(id), NOT public.profiles, so PostgREST
+    // cannot embed the owner profile (`owner:profiles!companies_owner_id_fkey(...)` fails
+    // with "Could not find a relationship between 'companies' and 'profiles' in the
+    // schema cache"). Fetch the owner profiles separately and merge them in the client.
+    const ownerIds = Array.from(new Set(companies.map((c: any) => c.owner_id).filter(Boolean))) as string[];
+    const owners: Record<string, any> = {};
+    if (ownerIds.length) {
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id,full_name,email,role')
+        .in('id', ownerIds);
+      if (profilesError) throw profilesError;
+      (profiles || []).forEach((p: any) => { owners[p.id] = p });
+    }
+
+    const { data: jobCounts, error: countsError } = await supabase.from('jobs').select('company_id');
+    if (countsError) throw countsError;
     const counts: Record<string, number> = {};
     (jobCounts || []).forEach((j: any) => { counts[j.company_id] = (counts[j.company_id] || 0) + 1 });
-    return (data || []).map((c: any) => ({ ...c, job_count: counts[c.id] || 0 }));
+
+    return companies.map((c: any) => ({ ...c, owner: (c.owner_id && owners[c.owner_id]) || null, job_count: counts[c.id] || 0 }));
   }
   return get('companies', []).map((c: any) => ({ ...c, job_count: allJobs().filter(j => j.company === c.name).length }));
 }
